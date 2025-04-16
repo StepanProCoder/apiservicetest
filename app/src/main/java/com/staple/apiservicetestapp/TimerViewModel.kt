@@ -16,18 +16,45 @@ class TimerViewModel : ViewModel() {
         val intent = Intent(context, TimerService::class.java)
         val duration = (minutes * 60 + seconds) * 1000L
         intent.action = TimerService.ACTION_START
-        intent.putExtra("duration", duration)
+        intent.putExtra(TimerService.EXTRA_DURATION, duration)
         context.startForegroundService(intent)
     }
 
     fun stopTimer(context: Context) {
-        context.stopService(Intent(context, TimerService::class.java))
+        val intent = Intent(context, TimerService::class.java)
+        intent.action = TimerService.ACTION_STOP
+        context.startService(intent)
+    }
+
+    fun resumeIfNeeded(context: Context) {
+        val prefs = context.getSharedPreferences("TimerPrefs", Context.MODE_PRIVATE)
+        val remainingTime = prefs.getLong("remainingTime", 0L)
+        val startTime = prefs.getLong("startTime", 0L)
+
+        if (remainingTime > 0 && startTime > 0) {
+            val elapsed = System.currentTimeMillis() - startTime
+            val adjusted = (remainingTime - elapsed).coerceAtLeast(0L)
+
+            if (adjusted > 0) {
+                val intent = Intent(context, TimerService::class.java).apply {
+                    action = TimerService.ACTION_START
+                    putExtra(TimerService.EXTRA_DURATION, adjusted)
+                    putExtra(TimerService.EXTRA_RESUMED, true)
+                }
+                context.startForegroundService(intent)
+
+                _remainingTime.value = adjusted
+            } else {
+                prefs.edit().clear().apply()
+            }
+        }
     }
 
     fun resetTimer(context: Context) {
         val intent = Intent(context, TimerService::class.java)
         intent.action = TimerService.ACTION_RESET
         context.startService(intent)
+        _remainingTime.value = 0L
     }
 
     fun updateTime(millis: Long) {
